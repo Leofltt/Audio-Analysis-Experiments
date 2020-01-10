@@ -3,6 +3,7 @@ import math
 from scipy.fftpack import ifft, fftshift
 from scipy.signal import blackmanharris, triang
 import dftAnSyn as dft
+import Utilities as U 
 
 def sineModelAnal(x, fs, win, N, H, tresh, maxSines = 100, minSineDur=.01, freqDevOffset=20, freqDevSlope=0.01):
 	if (minSineDur <0):                          
@@ -19,8 +20,8 @@ def sineModelAnal(x, fs, win, N, H, tresh, maxSines = 100, minSineDur=.01, freqD
 	while begin<end:                                                  
 		x1 = x[begin-hM1:begin+hM2]                            
 		mX, pX = dft.dftAnal(x1, win, N)                        
-		peaksLocation = peakDetection(mX, tresh)                        
-		iplocation, ipmag, ipphase = peak_parabolicInterp(mX, pX, peaksLocation)  
+		peaksLocation = U.peakDetection(mX, tresh)                        
+		iplocation, ipmag, ipphase = U.peak_parabolicInterp(mX, pX, peaksLocation)  
 		ipfreq = fs*iplocation/float(N)                            
 		# perform sinusoidal tracking by adding peaks to trajectories
 		tfreq, tmag, tphase = sineTracking(ipfreq, ipmag, ipphase, tfreq, freqDevOffset, freqDevSlope)
@@ -64,7 +65,7 @@ def sineModelSynth(tfreq, tmag, tphase, N, H, fs):
 			ytphase = tphase[l,:] 
 		else:
 			ytphase += (np.pi*(lastytfreq+tfreq[l,:])/fs)*H     # propagate phases
-		Y = genSinesSpectrum(tfreq[l,:], tmag[l,:], ytphase, N, fs)         
+		Y = U.genSinesSpectrum(tfreq[l,:], tmag[l,:], ytphase, N, fs)         
 		lastytfreq = tfreq[l,:]                               # save frequency for phase propagation
 		ytphase = ytphase % (2*np.pi)                        
 		yw = np.real(fftshift(ifft(Y)))                      
@@ -73,24 +74,7 @@ def sineModelSynth(tfreq, tmag, tphase, N, H, fs):
 	y = np.delete(y, range(hN))                         
 	y = np.delete(y, range(y.size-hN, y.size))         
 	return y
-
-def peakDetection(mX, tresh):
-    treshold = np.where(np.greater(mX[1:-1],tresh), mX[1:-1],0)
-    next_minor = np.where(mX[1:-1] > mX[2:], mX[1:-1],0)
-    previous_minor = np.where(mX[1:-1] > mX[:-2], mX[1:-1], 0)
-    peak_locations = treshold * next_minor * previous_minor
-    peak_locations = peak_locations.nonzero()[0] + 1
-    return peak_locations
-
-def peak_parabolicInterp(mX, pX, peaks):
-    mags = mX[peaks]
-    lmag = mX[peaks-1]
-    rmag = mX[peaks+1]
-    c_peak = peaks + 0.5 *(lmag-rmag)/(lmag-2*mags+rmag)
-    pMag = mags - 0.25 * (lmag-rmag) * (c_peak - peaks)
-    pPhase = np.interp(c_peak, np.arange(0, pX.size), pX)
-    return c_peak, pMag, pPhase
-
+	
 def sineTracking(pfreq, pmag, pphase, tfreq, freqDevOffset=20, freqDevSlope=0.01):
 	# tfreq: frequencies of tracks from previous frame
 
@@ -156,43 +140,3 @@ def cleanSineTracks(tfreq, minTrackLength=3):
 			if j <= minTrackLength:
 				trackFreqs[i:i+j] = 0
 	return tfreq
-
-def genSinesSpectrum(freq, mag, phase, N, fs):
-    Y = np.zeros(N, dtype = complex)                 
-    hN = N//2                                       
-    for i in range(0, freq.size):                  # generate all sine spectral lobes
-        loc = N * freq[i] / fs                     # it should be in range [0,hN-1] excluded
-        if loc==0 or loc>hN-1: continue
-        binremainder = round(loc)-loc
-        lb = np.arange(binremainder-4, binremainder+5) # main lobe bins to read
-        lmag = genBhLobe(lb) * 10**(mag[i]/20)        
-        b = np.arange(round(loc)-4, round(loc)+5, dtype='int')
-        for m in range(0, 9):
-            if b[m] < 0:                                 
-                Y[-b[m]] += lmag[m]*np.exp(-1j*phase[i])
-            elif b[m] > hN:                             
-                Y[b[m]] += lmag[m]*np.exp(-1j*phase[i])
-            elif b[m] == 0 or b[m] == hN:                
-                Y[b[m]] += lmag[m]*np.exp(1j*phase[i]) + lmag[m]*np.exp(-1j*phase[i])
-            else:                                        
-                Y[b[m]] += lmag[m]*np.exp(1j*phase[i])
-        Y[hN+1:] = Y[hN-1:0:-1].conjugate()            
-    return Y
-
-# blackman-harris window main lobe
-def genBhLobe(x):
-    N = 512                                                 
-    f = x*np.pi*2/N                                         
-    df = 2*np.pi/N
-    y = np.zeros(x.size)                                    
-    consts = [0.35875, 0.48829, 0.14128, 0.01168]           # window constants
-    for m in range(0,4):                                    
-        y += consts[m]/2 * (sinc(f-df*m, N) + sinc(f+df*m, N))  
-    y = y/N/consts[0]                                       
-    return y
-
-# main lobe of a sinc function 
-def sinc(x, N):
-    y = np.sin(N * x/2) / np.sin(x/2)                  
-    y[np.isnan(y)] = N                                 
-    return y
