@@ -1,15 +1,12 @@
 import numpy as np
 import math
 from scipy.fftpack import fft, ifft
-
-
-def isPow2(n):
-    return (n > 0) and ((n & (n - 1)) == 0)
+import Utilities as U
 
 
 def dftAnal(x, win, N):
 
-    if not(isPow2(N)):
+    if not(U.isPow2(N)):
         raise ValueError("FFT size not a power of 2")
     if (N < win.size):                                       
 	    raise ValueError("FFT size smaller than window size")
@@ -39,7 +36,7 @@ def dftSynth(mX, phX, n):
     pN = mX.size
     N = (pN-1)*2
 
-    if not(isPow2(N)):
+    if not(U.isPow2(N)):
         raise ValueError("FFT size not a power of 2")
 
     pM1 = int(math.floor((n+1)/2))

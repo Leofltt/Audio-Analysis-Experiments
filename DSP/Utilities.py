@@ -1,4 +1,13 @@
 import numpy as np 
+from scipy.fftpack import fft, ifft, fftshift
+from scipy.signal import blackmanharris, triang
+
+def normalize_signal(signal):
+    signal = np.double(signal)
+    return (signal - signal.mean()) / ((np.abs(signal)).max() + 0.0000000001)
+
+def isPow2(n):
+    return (n > 0) and ((n & (n - 1)) == 0)
 
 def peakDetection(mX, tresh):
     treshold = np.where(np.greater(mX[1:-1],tresh), mX[1:-1],0)
@@ -134,3 +143,27 @@ def twoWayMismatch(pfreq, pmag, f0c):
 	f0 = f0c[f0index]                                
 
 	return f0, Error[f0index]
+
+def subtractSines(x, N, H, sfreq, smag, sphase, fs):
+
+	hN = N//2                                          
+	x = np.append(np.zeros(hN),x)                      
+	x = np.append(x,np.zeros(hN))                      
+	bh = blackmanharris(N)                             
+	w = bh/ sum(bh)                                    
+	sw = np.zeros(N)                                   
+	sw[hN-H:hN+H] = triang(2*H) / w[hN-H:hN+H]         
+	L = sfreq.shape[0]                                 
+	xr = np.zeros(x.size)                              
+	begin = 0
+	for l in range(L):
+		xw = x[begin:begin+N]*w                              
+		X = fft(fftshift(xw))                            
+		Yh = genSinesSpectrum(sfreq[l,:], smag[l,:], sphase[l,:], N, fs)   
+		Xr = X-Yh                                        
+		xrw = np.real(fftshift(ifft(Xr)))                
+		xr[begin:begin+N] += xrw*sw                          
+		begin += H                                         
+	xr = np.delete(xr, range(hN))                      
+	xr = np.delete(xr, range(xr.size-hN, xr.size))    
+	return xr
