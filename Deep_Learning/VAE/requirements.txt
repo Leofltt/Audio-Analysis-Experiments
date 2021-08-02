@@ -1,0 +1,4 @@
+numpy
+librosa
+tensorflow==2.3.1
+
